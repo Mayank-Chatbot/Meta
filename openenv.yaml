@@ -1,0 +1,111 @@
+name: MetaMind
+version: "1.0.0"
+description: >
+  Self-Improving AI Environment that evaluates an agent's ability to
+  adapt its problem-solving strategy through iterative attempts using
+  Contextual Bandit, Multi-Armed Bandit, and Q-Learning algorithms.
+
+task_type: open_ended_reasoning
+real_world: true
+
+observation_space:
+  type: object
+  properties:
+    task:             { type: string, description: "The user's input task" }
+    attempt_number:   { type: integer, minimum: 1, maximum: 3 }
+    algorithm:        { type: string }
+    level:            { type: string, enum: [Basic, Medium, Advanced] }
+    previous_score:   { type: number, minimum: 0.0, maximum: 1.0, nullable: true }
+    previous_response:{ type: string, nullable: true }
+    context:          { type: object }
+
+action_space:
+  type: object
+  properties:
+    type:
+      type: string
+      enum: [reason, calculate, retry, change_strategy, submit]
+    content:   { type: string }
+    strategy:  { type: string, nullable: true }
+    arm:       { type: string, nullable: true }
+    q_action:  { type: string, nullable: true }
+
+reward:
+  type: continuous
+  range: [-1.5, 2.5]
+  components:
+    base_reward:
+      pass:  [1.0, 1.5, 2.0]
+      fail:  [-0.5, -0.3, -0.1]
+    step_penalty:
+      description: "attempt_number × per_attempt_penalty"
+      values:      [0.05, 0.03, 0.01]
+    adaptation_bonus:
+      description: "0.7 × (current_score − previous_score) if improved"
+      range: [0.0, 0.7]
+  signals: dense
+
+tasks:
+  - id: easy
+    difficulty: easy
+    description: Single-step calculation or factual query
+    grader: llm_quality_evaluator
+    score_range: [0.0, 1.0]
+    threshold: 0.70
+
+  - id: medium
+    difficulty: medium
+    description: Structured reasoning — explanations, comparisons, analysis
+    grader: llm_quality_evaluator
+    score_range: [0.0, 1.0]
+    threshold: 0.83
+
+  - id: hard
+    difficulty: hard
+    description: Multi-step technical explanation requiring deep understanding
+    grader: llm_quality_evaluator
+    score_range: [0.0, 1.0]
+    threshold: 0.95
+
+algorithms:
+  - id: contextual_bandit
+    level: Basic
+    policy: greedy_exploit
+    exploration: none
+    threshold: 0.70
+
+  - id: multi_armed_bandit
+    level: Medium
+    policy: ucb1
+    arms: 5
+    exploration_constant: 1.414
+    threshold: 0.83
+
+  - id: q_learning
+    level: Advanced
+    policy: epsilon_greedy
+    alpha: 0.15
+    gamma: 0.90
+    epsilon: 0.10
+    threshold: 0.95
+
+api:
+  base_url: http://localhost:8000
+  endpoints:
+    reset: { method: POST, path: /reset }
+    step:  { method: POST, path: /step  }
+    state: { method: GET,  path: /state }
+    run:   { method: POST, path: /run   }
+    agents:{ method: GET,  path: /agents}
+
+metrics:
+  - success_rate
+  - quality_score
+  - net_reward
+  - adaptation_gain
+  - attempts_used
+
+baseline:
+  script: meta_ai_env.py
+  endpoint: POST /run
+  reproducible: true
